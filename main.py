@@ -27,7 +27,8 @@ if __name__ == "__main__":
     config = getOCRConfig()
 
     sc = ScreenCapture()
-    ocr = OCR(config["APP_ID"], config["API_KEY"], config["SECRET_KEY"])
+    # ocr = OCR(mode='baidu', appId=config["APP_ID"], apiKey=config["API_KEY"], secretKey=config["SECRET_KEY"])
+    ocr = OCR(mode='paddle')
     query = Query()
 
     quesImg, answImg = None, None
