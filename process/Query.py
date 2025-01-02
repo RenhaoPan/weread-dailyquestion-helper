@@ -40,34 +40,55 @@ class Query:
 
     def _query(self, knowledge, answers):
         knowledge = self._preprocessKnowledge(knowledge)
-
-        freq = [knowledge.count(item) + 1 for item in answers]
-        rightAnswer = None
-        hint = None
-
-        if freq.count(1) == len(answers):
-            freqDict = {}
-            for item in answers:
-                for char in item:
-                    if char not in freqDict:
-                        freqDict[char] = knowledge.count(char)
-            for index in range(len(answers)):
-                for char in answers[index]:
-                    freq[index] += freqDict[char]
-            rightAnswer = answers[freq.index(max(freq))]
-
-            threshold = 50  # 前后 50 字符
-            hint = ''.join(knowledge[:threshold].split())
+        
+        # 1. 计算基础频率和相关性分数
+        scores = []
+        for answer in answers:
+            score = {
+                'text': answer,
+                'freq': knowledge.count(answer),  # 完整匹配频率
+                'char_freq': sum(knowledge.count(char) for char in answer),  # 字符匹配频率
+                'context_score': 0  # 上下文相关性分数
+            }
+            
+            # 2. 分析上下文相关性
+            answer_pos = knowledge.find(answer)
+            if answer_pos != -1:
+                context = knowledge[max(0, answer_pos-50):min(len(knowledge), answer_pos+50)]
+                # 检查上下文中是否包含一些关键词标识
+                context_keywords = ['是', '对', '正确', '表示', '意味着', '说明']
+                score['context_score'] += sum(1 for keyword in context_keywords if keyword in context)
+                
+                # 检查否定词
+                negative_keywords = ['不是', '错误', '并非', '相反']
+                score['context_score'] -= sum(2 for keyword in negative_keywords if keyword in context)
+            
+            # 3. 计算最终得分
+            final_score = (
+                score['freq'] * 3 +  # 完整匹配权重最高
+                score['char_freq'] * 1 +  # 字符匹配作为补充
+                score['context_score'] * 2  # 上下文相关性
+            )
+            scores.append((final_score, answer))
+        
+        # 4. 选择得分最高的答案
+        scores.sort(reverse=True)
+        right_answer = scores[0][1]
+        
+        # 5. 生成置信度
+        total_score = sum(score[0] for score in scores) or 1
+        confidence = [score[0]/total_score for score, _ in scores]
+        
+        # 6. 生成提示信息
+        answer_pos = knowledge.find(right_answer)
+        if answer_pos != -1:
+            context_start = max(0, answer_pos-30)
+            context_end = min(len(knowledge), answer_pos+50)
+            hint = f"...{knowledge[context_start:context_end]}..."
         else:
-            rightAnswer = answers[freq.index(max(freq))]
-            threshold = 80  # 前后 50 字符
-            hintIndex = max(knowledge.find(rightAnswer), threshold)
-            hint = ''.join(knowledge[hintIndex - 20:hintIndex + threshold].split())
+            hint = "未找到直接相关上下文"
 
-        total_freq = reduce(lambda a, b: a + b, freq)
-
-
-        return [f / total_freq for f in freq], rightAnswer, hint
+        return confidence, right_answer, hint
 
 
     def run(self, question, answers):
